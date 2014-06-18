@@ -2,6 +2,13 @@ import os
 import time
 import pickle
 
+
+def get_extensions():
+    import daemonchain.ext
+    ext = __import__('daemonchain.ext', globals(), locals(), daemonchain.ext.__all__, -1)
+    return [getattr(ext, module) for module in dir(ext) if not module.startswith('_')]
+
+
 class State(object):
     """Simple persistence
     """
