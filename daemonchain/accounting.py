@@ -4,8 +4,8 @@ def update_book(book, address, amount):
     """
     if address not in book:
         book[address] = 0
+    assert book[address] + amount >= 0, "Incorrect parsing. Should not be negative addresses. %s." % address
     book[address] += amount
-    assert book[address] >= 0, "Incorrect parsing. Should not be negative addresses. %s." % address
     if book[address] == 0: # Still zero, delete it.
         del book[address]
 

@@ -8,17 +8,17 @@ class Daemon(object):
     """
 
     # Some protection once this lib is on a live hosted service.
-    __whitelisted = set('getinfo', 'getblockcount', 'getblockhash',
-                     'getblock', 'gettransaction')
+    __whitelisted = set(['getinfo', 'getblockcount', 'getblockhash',
+                         'getblock', 'gettransaction'])
 
     def __init__(self, url, whitelist=set(), auto_connect=True):
         self.__url = url
-        self.__whitelisted += whitelist # Additional whitelist entries.
+        self.__whitelisted = self.__whitelisted.union(whitelist) # Additional whitelist entries.
         if auto_connect is True:
             self.connect()
 
     def connect(self):
-        self.__proxy = AuthServiceProxy(url)
+        self.__proxy = AuthServiceProxy(self.__url)
 
     def __getattr__(self, attr):
         if attr in self.__whitelisted:
@@ -30,21 +30,48 @@ class Daemon(object):
                 return getattr(self.__proxy, attr)
         else:
             raise AttributeError("`Daemon` object has no method `%s`. Not "
-                "forwarding command to RPC proxy. It's not in the whitelist.")
+                "forwarding command to RPC proxy. It's not in the whitelist." % attr)
 
 
 class Chain(object):
     """Main object to parse and walk the blockchain using `daemon`.
     """
     def __init__(self, daemon):
-        assert isinstance(daemon, connect.Daemon), "`daemon` argument must be"\
+        assert isinstance(daemon, Daemon), "`daemon` argument must be"\
             "a daemon object."
         self.__daemon = daemon
 
     # Properties
     @property
-    def block_count():
+    def block_count(self):
         return self.__daemon.getblockcount()
+
+    def get_blk(self, blk_n, with_tx=True):
+        # Get the block hash of block n.
+        blk_hash = self.__daemon.getblockhash(blk_n)
+        return blk_hash, self.__daemon.getblock(blk_hash, with_tx)
+
+    def get_tx(self, blk, tx_n):
+        tx = blk['tx'][tx_n]
+        return tx['txid'], tx
+
+    # Iterators
+    def iter_blks(self, max, min=0):
+        """Main Iterator. Iterate through blocks yielding the block
+        data and number. Overloaded in ProcessSafeChain to provide
+        multiprocess support.
+        """
+        for blk_n in range(min, max):
+            # generate (block number, block hash, block dict)
+            blk_hash, blk = self.get_blk(blk_n)
+            yield blk_n, blk_hash, blk
+
+    def iter_tx(self, blk_data):
+        """Iterate through block transactions.
+        """
+        for tx in blk_data['tx']:
+            # generate (transaction hash, transaction dict)
+            yield tx['txid'], tx
 
     # Base parsers
     def parse_tx_out(self, tx):
@@ -76,7 +103,7 @@ class Chain(object):
                 assert len(tx['vout'])==1, "Problem with parser. "\
                     "Expected only 1 output on a 'coinbase' transaction."
                 # generate (output number, output address, output amount)
-                yield, 0, 'coinbase', tx['vout'][0]['value']
+                yield 0, 'coinbase', tx['vout'][0]['value']
             else:
                 raise Exception("Bad transaction sent to `Chain.parse_tx_in`"
                                 ". %s" % tx)
@@ -105,25 +132,6 @@ class Chain(object):
             if address == target:
                 # generate (input number, input address, input amount)
                 yield n, address, amount
-
-    # Iterators
-    def iter_tx(self, blk_data):
-        """Iterate through block transactions.
-        """
-        for tx in blk_data['tx']:
-            # generate (transaction hash, transaction dict)
-            yield tx['txid'], tx
-
-    def iter_blks(self, max, min=0):
-        """Main Iterator. Iterate through blocks yielding the block
-        data and number. Overloaded in ProcessSafeChain to provide
-        multiprocess support.
-        """
-        for blk_n in range(min, max):
-            # Get the block hash of block n.
-            blk_hash = self.__daemon.getblockhash(blk_n)
-            # generate (block number, block hash, block dict)
-            yield blk_n, blk_hash, self.__daemon.getblock(blk_hash, True)
 
     # Queries
     def find_address_transactions(self, address, max=None, min=0):
@@ -172,7 +180,7 @@ class Chain(object):
 
 class ProcessSafeChain(Chain):
     """A multi-processes safe version of `Chain`. This accomplished by
-    acquiring a lock before processing a block
+    acquiring a lock on a block before processing it.
     # Not implemented.
     """
     def __init__(self, lock_mechanism):
