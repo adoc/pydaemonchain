@@ -50,7 +50,8 @@ class State(object):
         """
         """
         self.__state = {}
-        os.unlink(self.__persist_file)
+        if os.path.exists(self.__persist_file):
+            os.unlink(self.__persist_file)
         self.__count_since_persist = 0
 
 class Lock(object):
