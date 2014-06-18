@@ -172,7 +172,8 @@ class Chain(object):
 
 class ProcessSafeChain(Chain):
     """A multi-processes safe version of `Chain`. This accomplished by
-    acquiring a lock before processing a block and
+    acquiring a lock before processing a block
+    # Not implemented.
     """
     def __init__(self, lock_mechanism):
         pass
