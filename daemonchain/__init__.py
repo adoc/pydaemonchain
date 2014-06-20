@@ -1,5 +1,6 @@
 from bitcoinrpc.authproxy import AuthServiceProxy
 
+import daemonchain.accounting
 
 class Daemon(object):
     """Just a simple wrapper for bitcoinrpc.authproxy.AuthServicesProxy.
@@ -11,10 +12,10 @@ class Daemon(object):
     __whitelisted = set(['getinfo', 'getblockcount', 'getblockhash',
                          'getblock', 'gettransaction'])
 
-    def __init__(self, url, whitelist=set(), auto_connect=True):
+    def __init__(self, url, whitelist=set(), connect=True):
         self.__url = url
         self.__whitelisted = self.__whitelisted.union(whitelist) # Additional whitelist entries.
-        if auto_connect is True:
+        if connect is True:
             self.connect()
 
     def connect(self):
@@ -95,7 +96,7 @@ class Chain(object):
         """
         for in_ in tx['vin']:       # Iterate through tx inputs.
             if 'scriptSig' in in_:  # Only concerned with signed inputs.
-                input_tx = self.__daemon(in_['txid'])  # Get previous
+                input_tx = self.__daemon.gettransaction(in_['txid'])  # Get previous
                                                        #   transaction
                 # generate (output number, output address, output amount)
                 yield self.get_tx_out(input_tx, in_['vout'])
@@ -153,13 +154,13 @@ class Chain(object):
                     #           address balance)
                     yield address, -amount, bal
 
-    def all_transactions(max=None, min=0):
+    def all_transactions(self, max=None, min=0):
         """Iterate through blocks yielding all parsed transactions.
         yields (in or out, address, amount)
         """
         max = max or self.block_count
         for blk_n, _, blk in self.iter_blks(max, min=min):
-            for _, tx in iter_tx(blk):
+            for _, tx in self.iter_tx(blk):
                 for _, address, amount in self.parse_tx_out(tx):
                     yield address, amount, blk_n
                 for _, address, amount in self.parse_tx_in(tx):
@@ -174,7 +175,7 @@ class Chain(object):
         max = max or self.block_count
         for address, amount, blk_n in self.all_transactions(max=max,
                                                             min=min):
-            accounting.update_book(book, address, amount)
+            daemonchain.accounting.update_book(book, address, amount)
             yield book, blk_n
 
 
